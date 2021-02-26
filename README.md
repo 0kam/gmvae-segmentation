@@ -1,2 +1,2 @@
 # gmvae-segmentation
-Semi-supervised pixel-wise image segmentation with GMVAE
+Semi-supervised & unsupervised pixel-wise image segmentation with GMVAE
