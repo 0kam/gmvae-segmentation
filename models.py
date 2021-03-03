@@ -241,8 +241,9 @@ class GMVAE3D_US:
         cmap = plt.get_cmap("jet", self.num_cluster)
         plt.imsave(out_path, seg_image, cmap = cmap)
 
-gmvae = GMVAE3D_US(data_dir="crop", kernel_size=(5,5), num_cluster = 20,
-    z_dim=64, batch_size=5000, device="cuda")
-gmvae.train(200)
 
-gmvae.draw("crop/2010", "2010.png")
+gmvae = GMVAE3D_US(data_dir="crop", kernel_size=(5,5), num_cluster = 20,
+    z_dim=4, batch_size=5000, device="cuda")
+gmvae.train(300)
+
+gmvae.draw("crop/2010", "2010_kernel55_cluster20_ep300.png")
