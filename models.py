@@ -1,5 +1,5 @@
-from distributions import Inference2D, Generator2D, Classifier2D, Prior2D
-from utils import TrainDS2D, TestDS2D
+from distributions import Inference2D, Generator2D, Classifier2D, Prior2D, Inference3D, Generator3D, Classifier3D, Prior3D
+from utils import TrainDS2D, TestDS2D, TrainDS3D, TestDS3D
 from pixyz.losses import ELBO
 from pixyz.models import Model
 from torch import optim
@@ -244,6 +244,8 @@ class GMVAE3D_US:
 
 gmvae = GMVAE3D_US(data_dir="crop", kernel_size=(5,5), num_cluster = 20,
     z_dim=4, batch_size=5000, device="cuda")
+
+x = iter(gmvae.train_loader).next()
 gmvae.train(300)
 
 gmvae.draw("crop/2010", "2010_kernel55_cluster20_ep300.png")

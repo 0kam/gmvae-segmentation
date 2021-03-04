@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from pixyz.distributions import Normal, RelaxedCategorical
+from pixyz.distributions import Normal, RelaxedCategorical, Deterministic
 from pixyz.models import Model
 from pixyz.losses import ELBO
 
@@ -102,6 +102,7 @@ class Inference3D(Normal):
         _, h = self.lstm(x)
         h = h[0].view(-1, self.h_dim)
         h = self.prelu1(self.fc1(h))
+        seq_length = torch.zeros(x.shape[1])
         return {"loc": self.fc21(h), "scale": F.softplus(self.fc22(h))}
 
 # generative model p(x|z) 
@@ -121,10 +122,9 @@ class Generator3D(Normal):
     def forward(self, z):
         h = self.prelu1(self.fc1(z))
         h = h.unsqueeze(1)
-
         x1 = torch.zeros(h.shape).to(self.device)
-        init_hidden = torch.zeros(h.shape).transpose(0,1).to(self.device)
-        cell_state = h.transpose(0,1)
+        cell_state = torch.zeros(h.shape).transpose(0,1).to(self.device)
+        init_hidden = h.transpose(0,1)
         x = []
         for _ in range(self.seq_length):
             _, hc = self.lstm(x1, (init_hidden, cell_state))
@@ -167,4 +167,3 @@ class Prior3D(Normal):
     def forward(self, y):
         h = self.prelu1(self.fc1(y))
         return {"loc": self.fc21(h), "scale": F.softplus(self.fc22(h))}
-
