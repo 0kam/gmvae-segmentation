@@ -15,7 +15,7 @@ class GMVAE2D_US:
     """
     GMVAE object for unsupervised 2D (single) image segmentation.
     """
-    def __init__(self, data_dir, kernel_size=(9,9), num_cluster = 30, z_dim=64, batch_size=500, device = "cuda"):
+    def __init__(self, data_dir, kernel_size=(9,9), num_cluster = 30, z_dim=64, batch_size=500, device = "cuda", num_workers=1):
         """
         Parameters
         ----------
@@ -31,6 +31,8 @@ class GMVAE2D_US:
             A batch size
         device : str default "cuda"
             A device to use with pytorch.
+        num_workers : int default 1
+            The number of threads to use with torch.utils.DataLoader.
         """
         self.data_dir = data_dir
         self.kernel_size = kernel_size
@@ -38,6 +40,7 @@ class GMVAE2D_US:
         self.z_dim = z_dim
         self.batch_size = batch_size
         self.device = device
+        self.num_workers = num_workers
 
         # set a model
         x_dim = self.kernel_size[0] * self.kernel_size[1] * 3
@@ -67,8 +70,8 @@ class GMVAE2D_US:
         train_dataset = Subset(dataset, subset1_indices)
         val_dataset   = Subset(dataset, subset2_indices)
         
-        self.train_loader = DataLoader(train_dataset, batch_size, shuffle = False, num_workers=8)
-        self.val_loader = DataLoader(val_dataset, batch_size, shuffle = False, num_workers=8)
+        self.train_loader = DataLoader(train_dataset, batch_size, shuffle = False, num_workers=self.num_workers)
+        self.val_loader = DataLoader(val_dataset, batch_size, shuffle = False, num_workers=self.num_workers)
 
     def _train(self, epoch):
         train_loss = 0
@@ -121,26 +124,11 @@ class GMVAE2D_US:
         plt.imsave(out_path, seg_image, cmap = cmap)
             
 
-gmvae = GMVAE2D_US(data_dir="crop/2010", kernel_size=(5,5), num_cluster = 10,
-    z_dim=64, batch_size=5000, device="cuda")
-gmvae.train(300)
-
-
-import os
-if not os.path.exists("result"):
-    os.mkdir("result/2010")
-    os.mkdir("result/2020")
-
-for path in glob("crop/2010/*"):
-    gmvae.draw(path, path.replace("crop", "result"))
-
-
-
 class GMVAE3D_US:
     """
     GMVAE object for unsupervised 3D (time-series) image segmentation.
     """
-    def __init__(self, data_dir, kernel_size=(9,9), num_cluster = 30, z_dim=64, batch_size=500, device = "cuda"):
+    def __init__(self, data_dir, kernel_size=(9,9), num_cluster = 30, z_dim=64, batch_size=500, device = "cuda", num_workers=1):
         """
         Parameters
         ----------
@@ -156,6 +144,8 @@ class GMVAE3D_US:
             A batch size
         device : str default "cuda"
             A device to use with pytorch.
+        num_workers : int default 1
+            The number of threads to use with torch.utils.DataLoader.
         """
         self.data_dir = data_dir
         self.kernel_size = kernel_size
@@ -163,11 +153,11 @@ class GMVAE3D_US:
         self.z_dim = z_dim
         self.batch_size = batch_size
         self.device = device
+        self.num_workers = num_workers
 
         # set a model
         x_dim = self.kernel_size[0] * self.kernel_size[1] * 3
         seq_length = len(glob(glob(data_dir + "/*")[0] + "/*"))
-        
         self.p = Generator3D(x_dim, z_dim, seq_length, device).to(device)
         self._q = Inference3D(x_dim, z_dim, y_dim=self.num_cluster).to(device)
         self.f = Classifier3D(x_dim, self.num_cluster).to(device)
@@ -193,8 +183,8 @@ class GMVAE3D_US:
         train_dataset = Subset(dataset, subset1_indices)
         val_dataset   = Subset(dataset, subset2_indices)
         
-        self.train_loader = DataLoader(train_dataset, batch_size, shuffle = False, num_workers=8)
-        self.val_loader = DataLoader(val_dataset, batch_size, shuffle = False, num_workers=8)
+        self.train_loader = DataLoader(train_dataset, batch_size, shuffle = False, num_workers=self.num_workers)
+        self.val_loader = DataLoader(val_dataset, batch_size, shuffle = False, num_workers=self.num_workers)
 
     def _train(self, epoch):
         train_loss = 0
@@ -214,8 +204,6 @@ class GMVAE3D_US:
             x = x.to(self.device)       
             loss = self.model.test({"x": x})
             val_loss += loss
-            
-            pred_y = self.f.sample_mean({"x": x}).argmax(1).detach().cpu().numpy()
 
         print('Test loss: {:.4f}'.format(val_loss))
         return val_loss
@@ -240,12 +228,3 @@ class GMVAE3D_US:
         seg_image = torch.cat(pred_ys).reshape([w,h]).numpy()
         cmap = plt.get_cmap("jet", self.num_cluster)
         plt.imsave(out_path, seg_image, cmap = cmap)
-
-
-gmvae = GMVAE3D_US(data_dir="crop", kernel_size=(5,5), num_cluster = 20,
-    z_dim=4, batch_size=5000, device="cuda")
-
-x = iter(gmvae.train_loader).next()
-gmvae.train(300)
-
-gmvae.draw("crop/2010", "2010_kernel55_cluster20_ep300.png")

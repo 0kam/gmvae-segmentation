@@ -1,9 +1,13 @@
 from glob import glob
-from PIL import Image
+from PIL import Image, ImageDraw
 import torch
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms.functional import to_tensor
+import pandas as pd
+import json
+import cv2
+import numpy as np
 
 class TrainDS2D(Dataset):
     """
@@ -175,4 +179,22 @@ class TestDS3D(Dataset):
         patch = torch.reshape(patch, (patch.shape[0], -1))
         return patch
 
-tds = TestDS3D("crop/2010", (5,5))
+def read_sse(json_path, img_path):
+    with open(json_path) as js:
+        obj = json.load(js)["objects"]
+    obj = pd.io.json.json_normalize(obj)
+    polygons = list(obj["polygon"])
+    labels = obj["classIndex"]
+    img = cv2.imread(img_path)
+    img[:,:,:] = 0
+    for p, l in zip(polygons, labels):
+        polygon = []
+        for point in p:
+            point = list(point.values())
+            polygon.append(point)
+        polygon = np.array(polygon).reshape(-1, 1, 2).astype("int32")
+        img = cv2.fillConvexPoly(img, polygon, color = (l, l, l))
+
+
+    
+
