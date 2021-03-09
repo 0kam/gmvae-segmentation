@@ -8,8 +8,12 @@ import pandas as pd
 import json
 import cv2
 import numpy as np
+from tqdm import tqdm
+import os
+from pathlib import Path
+import shutil
 
-class TrainDS2D(Dataset):
+class TrainDS2DUS(Dataset):
     """
     Train Dataset that returns patches of images with a given kernel_size.
     Attributes
@@ -58,7 +62,7 @@ class TrainDS2D(Dataset):
         return patch
 
 
-class TestDS2D(Dataset):
+class TestDS2DUS(Dataset):
     """
     Test Dataset that returns patch, width and height of the patch center.
     This can be applied to a single image.
@@ -98,7 +102,7 @@ class TestDS2D(Dataset):
         return patch, center
 
 
-class TrainDS3D(Dataset):
+class TrainDS3DUS(Dataset):
     """
     Train Dataset that returns time series patches of images with a given kernel_size.
     Attributes
@@ -142,7 +146,7 @@ class TrainDS3D(Dataset):
         return patch
 
 
-class TestDS3D(Dataset):
+class TestDS3DUS(Dataset):
     """
     Train Dataset that returns time series patches of images with a given kernel_size.
     Attributes
@@ -182,7 +186,7 @@ class TestDS3D(Dataset):
 def read_sse(json_path, img_path):
     with open(json_path) as js:
         obj = json.load(js)["objects"]
-    obj = pd.io.json.json_normalize(obj)
+    obj = pd.json_normalize(obj)
     polygons = list(obj["polygon"])
     labels = obj["classIndex"]
     img = cv2.imread(img_path)
@@ -194,7 +198,42 @@ def read_sse(json_path, img_path):
             polygon.append(point)
         polygon = np.array(polygon).reshape(-1, 1, 2).astype("int32")
         img = cv2.fillConvexPoly(img, polygon, color = (l, l, l))
+    return img
 
+def save_ss_data2D(json_path, img_path, out_dir, kernel_size, batch_size = 5000):
+    if os.path.exists(out_dir) is False:
+        os.mkdir(out_dir)
+        os.mkdir(out_dir + "/labelled")
+        os.mkdir(out_dir + "/unlabelled")
+    img = cv2.imread(img_path)
+    data_name = Path(img_path).stem
+    mask = read_sse(json_path, img_path)
+    kw = int((kernel_size[0] - 1) / 2)
+    kh = int((kernel_size[1] - 1) / 2)
+    w = img.shape[1]
+    h = img.shape[0]
+    labels = np.unique(mask)
+    tensors = {}
+    for label in labels:
+        tensors[str(label)] = []
+        if os.path.exists(out_dir + "/" + str(label)) is False:
+            os.mkdir(out_dir + "/labelled/" + str(label))
+        
+    i = 0
+    for v in tqdm(range(h)):
+        for u in range(w):
+            patch = img[max(0, v-kh):(min(h, v+kh)+1), max(0, u-kw):(min(w, u+kh)+1), :]
+            label = mask[v,u][0]
+            patch = cv2.resize(patch, kernel_size).transpose(2,0,1) / 255
+            patch = patch.flatten().astype("float32")
+            tensors[str(label)].append(patch)
+            for label in labels:
+                if len(tensors[str(label)]) == batch_size:
+                    out_path = out_dir + "/labelled/" + str(label) + "/" + data_name + "_" + str(i) + ".npy"
+                    np.save(out_path, np.stack(tensors[str(label)], axis=0))
+                    tensors[str(label)] = []
+                i += 1
+    shutil.move(out_dir + "/labelled/0/", out_dir + "/unlabelled/0/")
 
-    
+save_ss_data2D(json_path, img_path, out_dir, (5,5), 2000)
 
