@@ -243,6 +243,7 @@ class Classifier3D_dev(RelaxedCategorical):
         h = self.prelu1(self.fc1(h))
         h = F.softmax(self.fc2(h), dim=1)
         h = h.unsqueeze(1)
+        h = h + 1e-7
         return {"probs": h}
 
 

@@ -48,7 +48,7 @@ class TrainDS2DUS(Dataset):
             self.target_image_path = to_read
             self.target_image = to_tensor(Image.open(self.target_image_path)) 
             # print("Read a new image " + self.image_paths[idx // (self.size[0] * self.size[1])])
-        center = (pix_num % self.size[1], pix_num // self.size[0])
+        center = (pix_num % self.size[0], pix_num // self.size[0])
         kw = int((self.kernel_size[0]-1) / 2)
         kh = int((self.kernel_size[1]-1) / 2)
         left = max(center[0] - kw, 0)
@@ -86,8 +86,8 @@ class TestDS2DUS(Dataset):
         return self.data_length
 
     def __getitem__(self, idx):
-        pix_num = idx % (self.size[0] * self.size[1])
-        center = (pix_num % self.size[1], pix_num // self.size[0])
+        #pix_num = idx % (self.size[0] * self.size[1])
+        center = (idx % self.size[0], idx // self.size[0])
         kw = int((self.kernel_size[0]-1) / 2)
         kh = int((self.kernel_size[1]-1) / 2)
         left = max(center[0] - kw, 0)
@@ -133,7 +133,7 @@ class TrainDS3DUS(Dataset):
             self.target_dir = to_read
             self.target_images = torch.stack([to_tensor(Image.open(f)) for f in glob(self.target_dir + "/*")], dim = 0)
             # print("Read new images " + self.target_dir)
-        center = (pix_num % self.size[1], pix_num // self.size[0])
+        center = (pix_num % self.size[0], pix_num // self.size[0])
         kw = int((self.kernel_size[0]-1) / 2)
         kh = int((self.kernel_size[1]-1) / 2)
         left = max(center[0] - kw, 0)
@@ -169,9 +169,7 @@ class TestDS3DUS(Dataset):
         return self.data_length
 
     def __getitem__(self, idx):
-        pix_num = idx % (self.size[0] * self.size[1])
-
-        center = (pix_num % self.size[1], pix_num // self.size[0])
+        center = (idx % self.size[0], idx // self.size[0])
         kw = int((self.kernel_size[0]-1) / 2)
         kh = int((self.kernel_size[1]-1) / 2)
         left = max(center[0] - kw, 0)
@@ -202,9 +200,9 @@ def read_sse(json_path, img_path):
 
 def save_ss_data2D(json_path, img_path, out_dir, kernel_size, batch_size = 5000):
     if os.path.exists(out_dir) is False:
-        os.mkdir(out_dir)
-        os.mkdir(out_dir + "/labelled")
-        os.mkdir(out_dir + "/unlabelled")
+        os.makedirs(out_dir)
+        os.makedirs(out_dir + "/labelled")
+        os.makedirs(out_dir + "/unlabelled")
     img = cv2.imread(img_path)
     data_name = Path(img_path).stem
     mask = read_sse(json_path, img_path)
@@ -224,7 +222,8 @@ def save_ss_data2D(json_path, img_path, out_dir, kernel_size, batch_size = 5000)
         for u in range(w):
             patch = img[max(0, v-kh):(min(h, v+kh)+1), max(0, u-kw):(min(w, u+kh)+1), :]
             label = mask[v,u][0]
-            patch = cv2.resize(patch, kernel_size).transpose(2,0,1) / 255
+            patch = cv2.resize(patch, kernel_size)
+            patch = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB).transpose(2,0,1) / 255
             patch = patch.flatten().astype("float32")
             tensors[str(label)].append(patch)
             for label in labels:
@@ -235,5 +234,4 @@ def save_ss_data2D(json_path, img_path, out_dir, kernel_size, batch_size = 5000)
                 i += 1
     shutil.move(out_dir + "/labelled/0/", out_dir + "/unlabelled/0/")
 
-save_ss_data2D(json_path, img_path, out_dir, (5,5), 2000)
 

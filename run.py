@@ -1,4 +1,5 @@
-from models import GMVAE2D_US, GMVAE3D_US
+from models import GMVAE2D_US, GMVAE3D_US, GMVAE2D_SS
+from utils import save_ss_data2D
 from glob import glob
 
 gmvae = GMVAE2D_US(data_dir="crop/2010", kernel_size=(5,5), num_cluster = 10,
@@ -19,4 +20,12 @@ gmvae = GMVAE3D_US(data_dir="data/crop", kernel_size=(5,5), num_cluster = 50,
 x = iter(gmvae.train_loader).next()
 gmvae.train(1000)
 
-gmvae.draw("crop/2010", "2010_kernel55_cluster20_ep300.png")
+gmvae.draw("data/crop/2010", "result/3D_US/2010_kernel55_cluster50_ep1000.png")
+
+# Semisupervised
+save_ss_data2D("data/tateyama.json", "data/tateyama.jpeg", "data/semisup/tateyama/", (9,9), 2000)
+
+gmvae = GMVAE2D_SS("data/semisup/tateyama/", z_dim=16, batch_size=5, device="cuda", num_workers=0)
+gmvae.train(15)
+
+seg = gmvae.draw("data/tateyama.jpeg", "tateyama_ss.jpg", (9, 9), batch_size = 50000, num_workers=20)

@@ -1,5 +1,5 @@
 from distributions import Inference2D, Generator2D, Classifier2D, Prior2D, Inference3D, Generator3D, Classifier3D, Prior3D
-from utils import TrainDS2D, TestDS2D, TrainDS3D, TestDS3D
+from utils import TrainDS2DUS, TestDS2DUS, TrainDS3DUS, TestDS3DUS
 from pixyz.losses import ELBO
 from pixyz.models import Model
 from torch import optim
@@ -63,7 +63,7 @@ class GMVAE2D_US:
                       optimizer=optim.Adam, optimizer_params={"lr":1e-3})
         print(self.model)
 
-        dataset = TrainDS2D(self.data_dir, self.kernel_size)
+        dataset = TrainDS2DUS(self.data_dir, self.kernel_size)
         n_samples = len(dataset)
         train_size = int(n_samples * 0.8)
         
@@ -108,21 +108,22 @@ class GMVAE2D_US:
     def draw(self, image_path, out_path):
         with Image.open(image_path) as img:
             w, h = img.size
-        dataset = TestDS2D(image_path, self.kernel_size)
+        dataset = TestDS2DUS(image_path, self.kernel_size)
         loader = DataLoader(dataset, self.batch_size, shuffle=False, num_workers=0)
         pred_ys = []
         #u_coords = []
         #v_coords = []
-        for x, ind in loader:
-            x = x.to(self.device)
-            pred_y = self.f.sample_mean({"x": x}).argmax(1).detach().cpu()
-            pred_ys.append(pred_y)
-            #u = ind[0]
-            #v = ind[1]
-            #u_coords.append(u)
-            #v_coords.append(v)
+        with torch.no_grad():
+            for x, ind in loader:
+                x = x.to(self.device)
+                pred_y = self.f.sample_mean({"x": x}).argmax(1).detach().cpu()
+                pred_ys.append(pred_y)
+                #u = ind[0]
+                #v = ind[1]
+                #u_coords.append(u)
+                #v_coords.append(v)
         
-        seg_image = torch.cat(pred_ys).reshape([w,h]).numpy()
+        seg_image = torch.cat(pred_ys).reshape([h,w]).numpy()
         cmap = plt.get_cmap("jet", self.num_cluster)
         plt.imsave(out_path, seg_image, cmap = cmap)
             
@@ -176,7 +177,7 @@ class GMVAE3D_US:
                       optimizer=optim.Adam, optimizer_params={"lr":1e-3})
         print(self.model)
 
-        dataset = TrainDS3D(self.data_dir, self.kernel_size)
+        dataset = TrainDS3DUS(self.data_dir, self.kernel_size)
         n_samples = len(dataset)
         train_size = int(n_samples * 0.8)
         
@@ -219,7 +220,7 @@ class GMVAE3D_US:
     def draw(self, image_dir, out_path):
         with Image.open(glob(image_dir+"/*")[0]) as img:
             w, h = img.size
-        dataset = TestDS3D(image_dir, self.kernel_size)
+        dataset = TestDS3DUS(image_dir, self.kernel_size)
         loader = DataLoader(dataset, self.batch_size, shuffle=False, num_workers=0)
         pred_ys = []
         with torch.no_grad():
@@ -228,7 +229,7 @@ class GMVAE3D_US:
                 pred_y = self.f.sample_mean({"x": x}).argmax(1).detach().cpu()
                 pred_ys.append(pred_y)
         
-        seg_image = torch.cat(pred_ys).reshape([w,h]).numpy()
+        seg_image = torch.cat(pred_ys).reshape([h,w]).numpy()
         cmap = plt.get_cmap("jet", self.num_cluster)
         plt.imsave(out_path, seg_image, cmap = cmap)
 
@@ -268,12 +269,12 @@ class GMVAE2D_SS:
         train_dataset = torch.utils.data.Subset(labelled, train_indices)
         val_dataset = torch.utils.data.Subset(labelled, val_indices)
         x, y = train_dataset[0]
-        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
         
         ## unlabelled loader
         unlabelled = DatasetFolder(data_dir+"/unlabelled/", load_npy, ".npy")
-        self.unlabelled_loader = DataLoader(unlabelled, batch_size, shuffle=False)
+        self.unlabelled_loader = DataLoader(unlabelled, batch_size, shuffle=True, num_workers=num_workers)
         # set a model
         self.x_dim = x.shape[1]
         
@@ -366,6 +367,7 @@ class GMVAE2D_SS:
             recall[c] = test_recall[i]
             prec[c] = test_precision[i]
             i += 1
+        print(total)
         print("Test Loss:", str(test_loss), "Test Recall:", str(recall), "Test Precision:", str(prec))
         return test_loss, recall, prec
     
@@ -374,23 +376,25 @@ class GMVAE2D_SS:
             train_loss = self._train(epoch)
             val_loss = self._val(epoch)
 
-gmvae = GMVAE2D_SS("data/semisup/tateyama/", 8, 3)
-gmvae._val(0)
-
-gmvae.train(200)
-
-test_loss = 0
-for x, _y in gmvae.val_loader:
-            _y = _y.view(_y.shape[0], 1).repeat(1, x.shape[1]).view(-1).unsqueeze(1)
-            y = torch.eye(len(gmvae.classes))[_y].to(gmvae.device).squeeze()
-            x = x.view([-1, gmvae.x_dim])
-            x = x.to(gmvae.device)
-            loss = gmvae.model.test({"x": x, "y": y})
-            test_loss += loss
-            pred_y = gmvae.f.sample_mean({"x": x}).argmax(dim=1).unsqueeze(1)
-            for c in range(len(gmvae.classes)):
-                pred_yc = pred_y[_y==c]
-                _yc = _y[pred_y==c]
-                total[c] += len(_y[_y==c])
-                tp[c] += len(pred_yc[pred_yc==c])
-                fp[c] += len(_yc[_yc!=c])
+    def draw(self, image_path, out_path, kernel_size, batch_size=10000, num_workers=1):
+        with Image.open(image_path) as img:
+            w, h = img.size
+        dataset = TestDS2DUS(image_path, kernel_size)
+        loader = DataLoader(dataset, batch_size, shuffle=False, num_workers=num_workers)
+        pred_ys = []
+        #u_coords = []
+        #v_coords = []
+        with torch.no_grad():
+            for x, ind in tqdm(loader):
+                x = x.to(self.device)
+                pred_y = self.f.sample_mean({"x": x}).argmax(1).detach().cpu()
+                pred_ys.append(pred_y)
+                #u = ind[0]
+                #v = ind[1]
+                #u_coords.append(u)
+                #v_coords.append(v)
+        
+        seg_image = torch.cat(pred_ys).reshape([h,w]).numpy()
+        cmap = plt.get_cmap("jet", len(self.classes))
+        plt.imsave(out_path, seg_image, cmap = cmap)
+        return seg_image
